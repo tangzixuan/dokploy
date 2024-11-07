@@ -4,7 +4,7 @@ import {
 	mkdirSync,
 	writeFileSync,
 } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { paths } from "@dokploy/server/constants";
 import type { InferResultType } from "@dokploy/server/types/with";
 import boxen from "boxen";
@@ -28,7 +28,10 @@ export const buildCompose = async (compose: ComposeNested, logPath: string) => {
 		const command = createCommand(compose);
 		await writeDomainsToCompose(compose, domains);
 		createEnvFile(compose);
-		await processComposeFile(compose);
+
+		if (compose.composeType === "stack") {
+			await processComposeFile(compose);
+		}
 
 		const logContent = `
 App Name: ${appName}
@@ -118,11 +121,8 @@ Compose Type: ${composeType} ✅`;
 		${newCompose}
 	
 		${envCommand}
-	
-		cd "${projectPath}";
-
-		${processComposeFileCommand}
-
+		${compose.composeType === "stack" && processComposeFileCommand}
+ 		cd ${projectPath};
 		docker ${command.split(" ").join(" ")} >> "${logPath}" 2>&1 || { echo "Error: ❌ Docker command failed" >> "${logPath}"; exit 1; }
 	
 		echo "Docker Compose Deployed: ✅" >> "${logPath}"
@@ -131,7 +131,6 @@ Compose Type: ${composeType} ✅`;
 		exit 1
 	}
 	`;
-
 	return await execAsyncRemote(compose.serverId, bashCommand);
 };
 
@@ -148,15 +147,13 @@ const sanitizeCommand = (command: string) => {
 export const createCommand = (compose: ComposeNested) => {
 	const { composeType, appName, sourceType } = compose;
 
-	let path = "";
+	let path = compose.composePath;
 
 	if (sourceType === "raw") {
 		path =
 			composeType === "stack"
 				? "docker-compose.processed.yml"
 				: "docker-compose.yml";
-	} else {
-		path = compose.composePath;
 	}
 
 	let command = "";
@@ -178,12 +175,20 @@ export const createCommand = (compose: ComposeNested) => {
 
 const createEnvFile = (compose: ComposeNested) => {
 	const { COMPOSE_PATH } = paths();
-	const { env, composePath, appName } = compose;
-	const composeFilePath =
-		join(COMPOSE_PATH, appName, "code", composePath) ||
-		join(COMPOSE_PATH, appName, "code", "docker-compose.yml");
+	const { env, composePath, appName, sourceType } = compose;
+	const composeFilePath = join(
+		COMPOSE_PATH,
+		appName,
+		"code",
+		sourceType !== "raw" ? composePath : "",
+	);
 
-	const envFilePath = join(dirname(composeFilePath), ".env");
+	let envFilePath = "";
+	if (sourceType === "raw") {
+		envFilePath = join(composeFilePath, ".env");
+	} else {
+		envFilePath = join(dirname(composeFilePath), ".env");
+	}
 	let envContent = env || "";
 	if (!envContent.includes("DOCKER_CONFIG")) {
 		envContent += "\nDOCKER_CONFIG=/root/.docker/config.json";
@@ -192,21 +197,32 @@ const createEnvFile = (compose: ComposeNested) => {
 	if (compose.randomize) {
 		envContent += `\nCOMPOSE_PREFIX=${compose.suffix}`;
 	}
-
 	const envFileContent = prepareEnvironmentVariables(envContent).join("\n");
 
 	if (!existsSync(dirname(envFilePath))) {
 		mkdirSync(dirname(envFilePath), { recursive: true });
 	}
+
+	console.log("Creando File", envFilePath);
 	writeFileSync(envFilePath, envFileContent);
 };
 
 export const processComposeFile = async (compose: ComposeNested) => {
 	const { COMPOSE_PATH } = paths();
+	const { sourceType, composePath, appName } = compose;
 	if (compose.composeType === "stack") {
 		const command = getProcessComposeFileCommand(compose);
+		const composeFilePath = resolve(
+			join(
+				COMPOSE_PATH,
+				appName,
+				"code",
+				sourceType !== "raw" ? composePath : "",
+			),
+		);
+		const composeDir = dirname(composeFilePath);
 		await execAsync(command, {
-			cwd: join(COMPOSE_PATH, compose.appName, "code"),
+			cwd: composeDir,
 		});
 	}
 };
@@ -215,9 +231,26 @@ export const getProcessComposeFileCommand = (compose: ComposeNested) => {
 	const { composeType } = compose;
 
 	let command = "";
-
+	const { sourceType, composePath, appName } = compose;
 	if (composeType === "stack") {
-		command = `export $(grep -v '^#' .env | xargs) && docker stack config -c docker-compose.yml > docker-compose.processed.yml`;
+		if (compose.serverId) {
+			const { COMPOSE_PATH } = paths(true);
+			const composeFilePath = resolve(
+				join(
+					COMPOSE_PATH,
+					appName,
+					"code",
+					sourceType !== "raw" ? composePath : "",
+				),
+			);
+			const composeDir = dirname(composeFilePath);
+			command = `
+			cd "${composeDir}";
+			export $(grep -v '^#' .env | xargs) && docker stack config -c docker-compose.yml > docker-compose.processed.yml
+			`;
+		} else {
+			command = `export $(grep -v '^#' .env | xargs) && docker stack config -c docker-compose.yml > docker-compose.processed.yml`;
+		}
 	}
 
 	return command;
