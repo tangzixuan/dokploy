@@ -16,7 +16,7 @@ jobs:
 
       - name: Get version from package.json
         id: package_version
-        run: echo "VERSION=$(jq -r .version package.json)" >> $GITHUB_ENV
+        run: echo "VERSION=$(jq -r .version ./apps/dokploy/package.json)" >> $GITHUB_ENV
 
       - name: Get latest GitHub tag
         id: latest_tag
@@ -42,8 +42,6 @@ jobs:
           PR_EXISTS=$(gh pr list --state open --base main --head canary --json number --jq '. | length')
           echo "PR_EXISTS=$PR_EXISTS" >> $GITHUB_ENV
           echo $PR_EXISTS
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create Pull Request
         if: env.VERSION_CHANGED == 'true' && env.PR_EXISTS == '0'
