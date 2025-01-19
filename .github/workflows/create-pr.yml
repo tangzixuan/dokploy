@@ -21,6 +21,7 @@ jobs:
         run: |
           LATEST_TAG=$(git ls-remote --tags origin | awk -F'/' '{print $3}' | sort -V | tail -n1)
           echo "LATEST_TAG=$LATEST_TAG" >> $GITHUB_ENV
+          echo $LATEST_TAG
 
       - name: Compare versions
         id: compare_versions
@@ -30,12 +31,14 @@ jobs:
           else
             echo "VERSION_CHANGED=false" >> $GITHUB_ENV
           fi
+          echo $VERSION_CHANGED
 
       - name: Check if a PR already exists
         id: check_pr
         run: |
           PR_EXISTS=$(gh pr list --state open --base main --head canary --json number --jq '. | length')
           echo "PR_EXISTS=$PR_EXISTS" >> $GITHUB_ENV
+          echo $PR_EXISTS
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
