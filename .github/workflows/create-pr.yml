@@ -12,9 +12,24 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Get current version from package.json
+      - name: Get version from package.json
         id: package_version
         run: echo "VERSION=$(jq -r .version package.json)" >> $GITHUB_ENV
+
+      - name: Get latest GitHub tag
+        id: latest_tag
+        run: |
+          LATEST_TAG=$(git ls-remote --tags origin | awk -F'/' '{print $3}' | sort -V | tail -n1)
+          echo "LATEST_TAG=$LATEST_TAG" >> $GITHUB_ENV
+
+      - name: Compare versions
+        id: compare_versions
+        run: |
+          if [ "${{ env.VERSION }}" != "${{ env.LATEST_TAG }}" ]; then
+            echo "VERSION_CHANGED=true" >> $GITHUB_ENV
+          else
+            echo "VERSION_CHANGED=false" >> $GITHUB_ENV
+          fi
 
       - name: Check if a PR already exists
         id: check_pr
@@ -25,7 +40,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create Pull Request
-        if: env.PR_EXISTS == '0'
+        if: env.VERSION_CHANGED == 'true' && env.PR_EXISTS == '0'
         uses: peter-evans/create-pull-request@v5
         with:
           title: "🚀 Release v${{ env.VERSION }}"
