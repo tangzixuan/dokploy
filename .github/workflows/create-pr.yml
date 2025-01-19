@@ -29,12 +29,15 @@ jobs:
         id: compare_versions
         run: |
           if [ "${{ env.VERSION }}" != "${{ env.LATEST_TAG }}" ]; then
-            echo "VERSION_CHANGED=true" >> $GITHUB_ENV
+            VERSION_CHANGED="true"
           else
-            echo "VERSION_CHANGED=false" >> $GITHUB_ENV
+            VERSION_CHANGED="false"
           fi
-          echo $VERSION_CHANGED
-          echo $VERSION
+          echo "VERSION_CHANGED=$VERSION_CHANGED" >> $GITHUB_ENV
+          echo "Comparing versions:"
+          echo "Current version: ${{ env.VERSION }}"
+          echo "Latest tag: ${{ env.LATEST_TAG }}"
+          echo "Version changed: $VERSION_CHANGED"
 
       - name: Check if a PR already exists
         id: check_pr
