@@ -43,7 +43,7 @@ jobs:
           echo "PR_EXISTS=$PR_EXISTS" >> $GITHUB_ENV
           echo $PR_EXISTS
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_PAT }}
 
       - name: Create Pull Request
         if: env.VERSION_CHANGED == 'true' && env.PR_EXISTS == '0'
