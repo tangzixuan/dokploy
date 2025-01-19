@@ -1,0 +1,53 @@
+name: Auto PR to main when version changes
+
+on:
+  push:
+    branches:
+      - canary
+
+jobs:
+  create-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Get current version from package.json
+        id: package_version
+        run: echo "VERSION=$(jq -r .version package.json)" >> $GITHUB_ENV
+
+      - name: Check if a PR already exists
+        id: check_pr
+        run: |
+          PR_EXISTS=$(gh pr list --state open --base main --head canary --json number --jq '. | length')
+          echo "PR_EXISTS=$PR_EXISTS" >> $GITHUB_ENV
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create Pull Request
+        if: env.PR_EXISTS == '0'
+        uses: peter-evans/create-pull-request@v5
+        with:
+          title: "🚀 Release v${{ env.VERSION }}"
+          body: |
+            ## 🔄 Release v${{ env.VERSION }}
+
+            This PR promotes changes from `canary` to `main` for version v${{ env.VERSION }}.
+
+            ### 🔍 Changes Include:
+            - Version bump to v${{ env.VERSION }}
+            - All changes from canary branch
+
+            ### ✅ Pre-merge Checklist:
+            - [ ] All tests passing
+            - [ ] Documentation updated
+            - [ ] Docker images built and tested
+
+            > 🤖 This PR was automatically generated from the canary branch
+          base: main
+          branch: canary
+          labels: "release"
+          reviewers: "siumauricio"
+          assignees: "siumauricio"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
